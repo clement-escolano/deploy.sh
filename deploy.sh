@@ -19,9 +19,9 @@ IFS=$'\n\t'
 #/             - django (run migrations and collect static files)
 #/             - python (set up a virtualenv and install requirements)
 #/             - sqlite (back up the database)
-#/       -r: Repository address
 #/       -h: SSH host to deploy
 #/       -k: Number of releases to keep (default: 3)
+#/       -r: Repository address
 #/   --help: Display this help message
 
 usage() {
