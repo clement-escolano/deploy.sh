@@ -22,6 +22,10 @@ IFS=$'\n\t'
 #/       -h: SSH host to deploy
 #/       -k: Number of releases to keep (default: 3)
 #/       -r: Repository address
+#/       -s: Shared path that should be symlinked to a canonical value. Can be
+#/           set multiple times. The shared path will be symlinked in the
+#/           release directory. The canonical value should be in the `shared`
+#/           directory inside the deployment directory on the remote server.
 #/   --help: Display this help message
 
 usage() {
@@ -65,8 +69,9 @@ parse_options() {
 	# Default options
 	GIT_BRANCH=master
 	KEEP_RELEASES=3
+	SHARED_PATHS=()
 
-	while getopts :b:d:f:r:h:k: option; do
+	while getopts :b:d:f:h:k:r:s: option; do
 		case "$option" in
 			b) GIT_BRANCH="$OPTARG" ;;
 			d) DEPLOYMENT_DIRECTORY="$OPTARG" ;;
@@ -74,6 +79,7 @@ parse_options() {
 			h) SSH_HOST="$OPTARG" ;;
 			k) KEEP_RELEASES="$OPTARG" ;;
 			r) GIT_REPOSITORY="$OPTARG" ;;
+			s) SHARED_PATHS+=("$OPTARG") ;;
 			\?) fatal "Invalid option $OPTARG found" ;;
 		esac
 	done
@@ -91,6 +97,7 @@ parse_options() {
 	GIT_BRANCH=$GIT_BRANCH
 	LOG_FILE=$LOG_FILE
 	FRAMEWORKS=${!FRAMEWORKS[*]}
+	SHARED_PATHS=${SHARED_PATHS[*]}
 	"
 }
 
@@ -122,6 +129,14 @@ remote_command_with_warning() {
 	remote_command_with_log "warning" "$@"
 }
 
+remote_command_with_error() {
+	remote_command_with_log "error" "$@"
+}
+
+remote_command_with_fatal() {
+	remote_command_with_log "fatal" "$@"
+}
+
 remote_command() {
 	remote_command_with_log "file" "$@"
 }
@@ -131,6 +146,15 @@ fetch_repository() {
 	remote_command "mkdir -p $RELEASE_DIRECTORY"
 	remote_command "git clone --single-branch --branch $GIT_BRANCH --depth 1 $GIT_REPOSITORY $RELEASE_DIRECTORY 2>&1"
 	remote_command "cd $RELEASE_DIRECTORY && git rev-parse $GIT_BRANCH > REVISION"
+}
+
+run_shared_tasks() {
+	for shared_path in "${SHARED_PATHS[@]}"; do
+		info "Linking shared path: $shared_path"
+		remote_command "mkdir -p \$(dirname $DEPLOYMENT_DIRECTORY/shared/$shared_path)"
+		remote_command "mkdir -p \$(dirname $RELEASE_DIRECTORY/$shared_path)"
+		remote_command "ln -s $DEPLOYMENT_DIRECTORY/shared/$shared_path $RELEASE_DIRECTORY/$shared_path"
+	done
 }
 
 run_python_tasks() {
@@ -175,6 +199,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	parse_options "$@"
 	RELEASE_DIRECTORY="$DEPLOYMENT_DIRECTORY/releases/$(date +"%Y%m%d%H%M%S")"
 	fetch_repository
+	if [ "${#SHARED_PATHS[@]}" -gt 0 ]; then run_shared_tasks; fi
 	if [ -n "${FRAMEWORKS[python]}" ]; then run_python_tasks; fi
 	if [ -n "${FRAMEWORKS[sqlite]}" ]; then run_sqlite_tasks; fi
 	if [ -n "${FRAMEWORKS[django]}" ]; then run_django_tasks; fi
