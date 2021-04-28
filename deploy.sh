@@ -166,6 +166,10 @@ clean_old_releases() {
 	remote_command "cd $DEPLOYMENT_DIRECTORY/releases && (find . -mindepth 1 -maxdepth 1 | sort -r | head -n $KEEP_RELEASES; find . -mindepth 1 -maxdepth 1) | sort | uniq -u | xargs rm -rf"
 }
 
+summary() {
+	remote_command_with_info "cd $RELEASE_DIRECTORY && echo Successfully deployed to commit: \$(git log -1 --pretty=%B)"
+}
+
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	trap explain_error ERR
 	parse_options "$@"
@@ -176,4 +180,5 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	if [ -n "${FRAMEWORKS[django]}" ]; then run_django_tasks; fi
 	publish
 	clean_old_releases
+	summary
 fi
