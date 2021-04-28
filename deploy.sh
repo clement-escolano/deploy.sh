@@ -163,7 +163,7 @@ publish() {
 clean_old_releases() {
 	info "Cleaning old releases"
 	# Display the latest backups and all the backups, then keep only the backups displayed once and delete them
-	remote_command "cd $DEPLOYMENT_DIRECTORY/releases && (find . -mindepth 1 -maxdepth 1 | sort | head -n $KEEP_RELEASES; find . -mindepth 1 -maxdepth 1) | sort | uniq -u | xargs rm -rf"
+	remote_command "cd $DEPLOYMENT_DIRECTORY/releases && (find . -mindepth 1 -maxdepth 1 | sort -r | head -n $KEEP_RELEASES; find . -mindepth 1 -maxdepth 1) | sort | uniq -u | xargs rm -rf"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
