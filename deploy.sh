@@ -14,6 +14,11 @@ IFS=$'\n\t'
 #/ Options:
 #/       -b: Git branch to deploy (default: master)
 #/       -d: Directory where repository is deployed in remote server
+#/       -f: Specify frameworks that needs to be installed. Can be set multiple
+#/           times. Current frameworks are:
+#/             - django (run migrations and collect static files)
+#/             - python (set up a virtualenv and install requirements)
+#/             - sqlite (back up the database)
 #/       -r: Repository address
 #/       -h: SSH host to deploy
 #/       -k: Number of releases to keep (default: 3)
@@ -55,14 +60,20 @@ fail_with_details() {
 	Error details: $error"
 }
 
+declare -A FRAMEWORKS
 parse_options() {
-	while getopts :b:d:r:h:k: option; do
+	# Default options
+	GIT_BRANCH=master
+	KEEP_RELEASES=3
+
+	while getopts :b:d:f:r:h:k: option; do
 		case "$option" in
 			b) GIT_BRANCH="$OPTARG" ;;
 			d) DEPLOYMENT_DIRECTORY="$OPTARG" ;;
-			r) GIT_REPOSITORY="$OPTARG" ;;
+			f) FRAMEWORKS["$OPTARG"]=1 ;;
 			h) SSH_HOST="$OPTARG" ;;
 			k) KEEP_RELEASES="$OPTARG" ;;
+			r) GIT_REPOSITORY="$OPTARG" ;;
 			\?) fatal "Invalid option $OPTARG found" ;;
 		esac
 	done
@@ -70,8 +81,6 @@ parse_options() {
 	if [[ -z "${DEPLOYMENT_DIRECTORY+x}" ]]; then fatal "Website directory not specified. Use the option '-d'"; fi
 	if [[ -z "${GIT_REPOSITORY+x}" ]]; then fatal "Git repository not specified. Use the option '-r'"; fi
 	if [[ -z "${SSH_HOST+x}" ]]; then fatal "SSH host not specified. Use the option '-h'"; fi
-	if [[ -z "${KEEP_RELEASES+x}" ]]; then KEEP_RELEASES=3; fi
-	if [[ -z "${GIT_BRANCH+x}" ]]; then GIT_BRANCH=master; fi
 
 	local IFS=$' '
 	info "Running script at $(date +"%Y/%m/%d %H:%M:%S") with options:
@@ -81,6 +90,7 @@ parse_options() {
 	KEEP_RELEASES=$KEEP_RELEASES
 	GIT_BRANCH=$GIT_BRANCH
 	LOG_FILE=$LOG_FILE
+	FRAMEWORKS=${!FRAMEWORKS[*]}
 	"
 }
 
@@ -96,11 +106,16 @@ remote_command_with_log() {
 	fi
 
 	case "$mode" in
+		info) if [ -n "$output" ]; then info "$output"; fi ;;
 		warning) if [ -n "$output" ]; then warning "$output"; fi ;;
 		error) if [ -n "$output" ]; then error "$output"; fi ;;
 		fatal) if [ -n "$output" ]; then fatal "$output"; fi ;;
 		*) echo "$output" >>"$LOG_FILE" ;;
 	esac
+}
+
+remote_command_with_info() {
+	remote_command_with_log "info" "$@"
 }
 
 remote_command_with_warning() {
@@ -126,10 +141,13 @@ run_python_tasks() {
 	remote_command "cd $RELEASE_DIRECTORY && source venv/bin/activate && pip install -r requirements.txt"
 }
 
-run_django_tasks() {
+run_sqlite_tasks() {
 	info "Backing up database"
 	remote_command_with_warning "cd $RELEASE_DIRECTORY && test -f db.sqlite3 || echo No existing database found."
 	remote_command "cd $RELEASE_DIRECTORY && test -f db.sqlite3 && cp db.sqlite3 db.sqlite3.bak || true"
+}
+
+run_django_tasks() {
 	info "Running Django migrations"
 	remote_command "cd $RELEASE_DIRECTORY && source venv/bin/activate && python manage.py migrate"
 	info "Collecting static files"
@@ -153,8 +171,9 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	parse_options "$@"
 	RELEASE_DIRECTORY="$DEPLOYMENT_DIRECTORY/releases/$(date +"%Y%m%d%H%M%S")"
 	fetch_repository
-	run_python_tasks
-	run_django_tasks
+	if [ -n "${FRAMEWORKS[python]}" ]; then run_python_tasks; fi
+	if [ -n "${FRAMEWORKS[sqlite]}" ]; then run_sqlite_tasks; fi
+	if [ -n "${FRAMEWORKS[django]}" ]; then run_django_tasks; fi
 	publish
 	clean_old_releases
 fi
