@@ -2,6 +2,14 @@
 
 Shell utility to deploy a git repository to a remote SSH server.
 
+## Requirements
+
+This script is focused to have minimal dependencies:
+
+- SSH access to the remote server
+- `bash` installed on client
+- `git` installed on server
+
 ## Getting started
 
 The script can be copied in the working directory or in a directory in the `PATH`.
