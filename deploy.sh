@@ -26,6 +26,10 @@ IFS=$'\n\t'
 #/           set multiple times. The shared path will be symlinked in the
 #/           release directory. The canonical value should be in the `shared`
 #/           directory inside the deployment directory on the remote server.
+#/       -t: Deployment type, may be either:
+#/             - deploy (default) which deploys the git repository to the SSH
+#/               host
+#/             - rollback which reverts the current release to the previous one
 #/   --help: Display this help message
 
 usage() {
@@ -70,8 +74,9 @@ parse_options() {
 	GIT_BRANCH=master
 	KEEP_RELEASES=3
 	SHARED_PATHS=()
+	TYPE=deploy
 
-	while getopts :b:d:f:h:k:r:s: option; do
+	while getopts :b:d:f:h:k:r:s:t: option; do
 		case "$option" in
 			b) GIT_BRANCH="$OPTARG" ;;
 			d) DEPLOYMENT_DIRECTORY="$OPTARG" ;;
@@ -80,6 +85,7 @@ parse_options() {
 			k) KEEP_RELEASES="$OPTARG" ;;
 			r) GIT_REPOSITORY="$OPTARG" ;;
 			s) SHARED_PATHS+=("$OPTARG") ;;
+			t) TYPE="$OPTARG" ;;
 			\?) fatal "Invalid option $OPTARG found" ;;
 		esac
 	done
@@ -90,6 +96,7 @@ parse_options() {
 
 	local IFS=$' '
 	info "Running script at $(date +"%Y/%m/%d %H:%M:%S") with options:
+	TYPE=$TYPE
 	DEPLOYMENT_DIRECTORY=$DEPLOYMENT_DIRECTORY
 	GIT_REPOSITORY=$GIT_REPOSITORY
 	SSH_HOST=$SSH_HOST
@@ -113,12 +120,17 @@ remote_command_with_log() {
 	fi
 
 	case "$mode" in
+		echo) if [ -n "$output" ]; then echo "$output"; fi ;;
 		info) if [ -n "$output" ]; then info "$output"; fi ;;
 		warning) if [ -n "$output" ]; then warning "$output"; fi ;;
 		error) if [ -n "$output" ]; then error "$output"; fi ;;
 		fatal) if [ -n "$output" ]; then fatal "$output"; fi ;;
 		*) echo "$output" >>"$LOG_FILE" ;;
 	esac
+}
+
+remote_command_with_echo() {
+	remote_command_with_log "echo" "$@"
 }
 
 remote_command_with_info() {
@@ -179,7 +191,7 @@ run_django_tasks() {
 }
 
 publish() {
-	info "Publishing new release"
+	info "Publishing release"
 	remote_command "cd $DEPLOYMENT_DIRECTORY && if [ -d current ] && [ ! -L current ]; then echo Error: could not make symbolic link && exit 1; fi"
 	remote_command "cd $DEPLOYMENT_DIRECTORY && ln -nfs $RELEASE_DIRECTORY current_tmp && mv -fT current_tmp current"
 }
@@ -194,9 +206,7 @@ summary() {
 	remote_command_with_info "cd $RELEASE_DIRECTORY && echo Successfully deployed to commit: \$(git log -1 --pretty=%B)"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-	trap explain_error ERR
-	parse_options "$@"
+deploy() {
 	RELEASE_DIRECTORY="$DEPLOYMENT_DIRECTORY/releases/$(date +"%Y%m%d%H%M%S")"
 	fetch_repository
 	if [ "${#SHARED_PATHS[@]}" -gt 0 ]; then run_shared_tasks; fi
@@ -206,4 +216,26 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	publish
 	clean_old_releases
 	summary
+}
+
+rollback() {
+	info "Analysing releases state"
+	current_release=$(remote_command_with_echo "if [ -h $DEPLOYMENT_DIRECTORY/current ]; then basename \$(readlink $DEPLOYMENT_DIRECTORY/current); fi")
+	if [[ -z $current_release ]]; then fatal "No current release found. Cannot determine the previous release."; fi
+	previous_release=$(remote_command_with_echo "ls $DEPLOYMENT_DIRECTORY/releases | grep -B 1 $current_release | grep -v $current_release || echo")
+	if [[ -z $previous_release ]]; then fatal "No previous release available. Cannot rollback."; fi
+	info "Beginning rollback to release $previous_release"
+	RELEASE_DIRECTORY="$DEPLOYMENT_DIRECTORY/releases/$previous_release"
+	publish
+	summary
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	trap explain_error ERR
+	parse_options "$@"
+	if [[ "$TYPE" == "deploy" ]]; then
+		deploy
+	else
+		rollback
+	fi
 fi
