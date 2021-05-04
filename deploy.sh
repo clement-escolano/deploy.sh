@@ -13,15 +13,15 @@ IFS=$'\n\t'
 #/ Example: ./deploy.sh -r git@example.com:me/deploy.sh.git -d /home/me -h host
 #/ Options:
 #/       -b: Git branch to deploy (default: master)
-#/       -d: Directory where repository is deployed in remote server
+#/       -d: Directory where repository is deployed in remote server (required)
 #/       -f: Specify frameworks that needs to be installed. Can be set multiple
 #/           times. Current frameworks are:
 #/             - django (run migrations and collect static files)
 #/             - python (set up a virtualenv and install requirements)
 #/             - sqlite (back up the database)
-#/       -h: SSH host to deploy
+#/       -h: SSH host to deploy (required)
 #/       -k: Number of releases to keep (default: 3)
-#/       -r: Repository address
+#/       -r: Repository address (required)
 #/       -s: Shared path that should be symlinked to a canonical value. Can be
 #/           set multiple times. The shared path will be symlinked in the
 #/           release directory. The canonical value should be in the `shared`
