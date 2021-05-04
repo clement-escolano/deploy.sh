@@ -108,7 +108,7 @@ remote_command_with_log() {
 	debug "$@"
 	set +e
 	# shellcheck disable=SC2029 # Parameters needs to be expanded before being sent to the server
-	if ! output=$(ssh "$SSH_HOST" "bash -c '$*'" 2>&1); then
+	if ! output=$(ssh "$SSH_HOST" "$*" 2>&1); then
 		fail_with_details "$*" "$output"
 	fi
 
@@ -160,9 +160,9 @@ run_shared_tasks() {
 run_python_tasks() {
 	info "Creating Virtual environment"
 	remote_command "cd $RELEASE_DIRECTORY && python3 -m venv venv"
-	remote_command "cd $RELEASE_DIRECTORY && source venv/bin/activate && pip install pip --upgrade"
+	remote_command "cd $RELEASE_DIRECTORY && venv/bin/pip install pip --upgrade"
 	info "Installing dependencies from requirements.txt"
-	remote_command "cd $RELEASE_DIRECTORY && source venv/bin/activate && pip install -r requirements.txt"
+	remote_command "cd $RELEASE_DIRECTORY && venv/bin/pip install -r requirements.txt"
 }
 
 run_sqlite_tasks() {
@@ -173,9 +173,9 @@ run_sqlite_tasks() {
 
 run_django_tasks() {
 	info "Running Django migrations"
-	remote_command "cd $RELEASE_DIRECTORY && source venv/bin/activate && python manage.py migrate"
+	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py migrate"
 	info "Collecting static files"
-	remote_command "cd $RELEASE_DIRECTORY && source venv/bin/activate && python manage.py collectstatic"
+	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py collectstatic"
 }
 
 publish() {
