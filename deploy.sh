@@ -157,7 +157,6 @@ fetch_repository() {
 	info "Fetching git repository $GIT_REPOSITORY (branch $GIT_BRANCH) into $RELEASE_DIRECTORY"
 	remote_command "mkdir -p $RELEASE_DIRECTORY"
 	remote_command "git clone --single-branch --branch $GIT_BRANCH --depth 1 $GIT_REPOSITORY $RELEASE_DIRECTORY 2>&1"
-	remote_command "cd $RELEASE_DIRECTORY && git rev-parse $GIT_BRANCH > REVISION"
 }
 
 run_shared_tasks() {
@@ -194,6 +193,8 @@ publish() {
 	info "Publishing release"
 	remote_command "cd $DEPLOYMENT_DIRECTORY && if [ -d current ] && [ ! -L current ]; then echo Error: could not make symbolic link && exit 1; fi"
 	remote_command "cd $DEPLOYMENT_DIRECTORY && ln -nfs $RELEASE_DIRECTORY current_tmp && mv -fT current_tmp current"
+	remote_command "cd $DEPLOYMENT_DIRECTORY && git -C $RELEASE_DIRECTORY log -1 --pretty=%B > CURRENT_COMMIT"
+	remote_command "cd $DEPLOYMENT_DIRECTORY && git -C $RELEASE_DIRECTORY rev-parse $GIT_BRANCH > CURRENT_REVISION"
 }
 
 clean_old_releases() {
