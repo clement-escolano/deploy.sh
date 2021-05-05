@@ -5,32 +5,53 @@ set -u # Treat undefined variable as an error
 IFS=$'\n\t'
 
 #/ Usage: Deploy a git repository to a remote SSH server
-#/ Description: With configuration via command line or the file
-#/              .deploy-configuration in the working directory, deploy a git
-#/              repository safely to a remote SSH server, keeping old releases
-#/              and running additional commands to install frameworks required
-#/              by the deployed software.
+#/ Description:
+#/     With configuration via command line or the file .deploy in the working
+#/     directory, deploy a git repository safely to a remote SSH server,
+#/     keeping old releases and running additional commands to install
+#/     frameworks required by the deployed software.
 #/ Example: ./deploy.sh -r git@example.com:me/deploy.sh.git -d /home/me -h host
-#/ Options:
-#/       -b: Git branch to deploy (default: master)
-#/       -d: Directory where repository is deployed in remote server (required)
-#/       -f: Specify frameworks that needs to be installed. Can be set multiple
-#/           times. Current frameworks are:
+#/ Configuration file:
+#/     To use a configuration file, creates a `.deploy` file following the
+#/     environment file format. You can also copy-paste the options logged
+#/     by the script when running from the command line. You can also use the
+#/     `.deploy-secret` file which behaves the same way for secret options
+#/     (the repository address with an access token for instance).
+#/ Configuration file example:
+#/     DEPLOYMENT_DIRECTORY=/home/me
+#/     GIT_REPOSITORY=git@example.com:me/deploy.sh.git
+#/     SSH_HOST=user@host
+#/     FRAMEWORKS="python django"
+#/     SHARED_PATHS=db.sqlite3
+#/ Options (corresponding option for configuration file within brackets):
+#/     -b (GIT_BRANCH)
+#/         Git branch to deploy (default: master)
+#/     -d (DEPLOYMENT_DIRECTORY)
+#/         Directory where repository is deployed in remote server (required)
+#/     -f (FRAMEWORKS)
+#/         Specify frameworks that needs to be installed. Can be set multiple
+#/         times. Current frameworks are:
 #/             - django (run migrations and collect static files)
 #/             - python (set up a virtualenv and install requirements)
 #/             - sqlite (back up the database)
-#/       -h: SSH host to deploy (required)
-#/       -k: Number of releases to keep (default: 3)
-#/       -r: Repository address (required)
-#/       -s: Shared path that should be symlinked to a canonical value. Can be
-#/           set multiple times. The shared path will be symlinked in the
-#/           release directory. The canonical value should be in the `shared`
-#/           directory inside the deployment directory on the remote server.
-#/       -t: Deployment type, may be either:
-#/             - deploy (default) which deploys the git repository to the SSH
-#/               host
+#/         Must me within quotes in the configuration file.
+#/     -h (SSH_HOST)
+#/         SSH host to deploy (required)
+#/     -k (KEEP_RELEASES)
+#/         Number of releases to keep (default: 3)
+#/     -r (GIT_REPOSITORY)
+#/         Git repository address (required)
+#/     -s (SHARED_PATHS)
+#/         Shared path that should be symlinked to a canonical value. Can be
+#/         set multiple times. The shared path will be symlinked in the
+#/         release directory. The canonical value should be in the `shared`
+#/         directory inside the deployment directory on the remote server.
+#/     -t (TYPE)
+#/         Deployment type, may be either:
+#/             - deploy (default) which deploys the git repository to the
+#/               SSH host
 #/             - rollback which reverts the current release to the previous one
-#/   --help: Display this help message
+#/     --help: Display this help message
 
 usage() {
 	grep '^#/' "$0" | cut -c4-
@@ -69,13 +90,29 @@ fail_with_details() {
 }
 
 declare -A FRAMEWORKS
-parse_options() {
-	# Default options
+set_default_options() {
 	GIT_BRANCH=master
 	KEEP_RELEASES=3
 	SHARED_PATHS=()
 	TYPE=deploy
+}
 
+parse_options_file() {
+	if [ -f "$PWD/.deploy" ]; then
+		source "$PWD/.deploy"
+	fi
+	if [ -f "$PWD/.deploy-secret" ]; then
+		source "$PWD/.deploy-secret"
+	fi
+	IFS=" " read -r -a SHARED_PATHS <<<"${SHARED_PATHS-}"
+	IFS=" " read -r -a FRAMEWORK_LIST <<<"${FRAMEWORKS-}"
+	FRAMEWORKS=()
+	for FRAMEWORK in "${FRAMEWORK_LIST[@]}"; do
+		FRAMEWORKS["$FRAMEWORK"]=1
+	done
+}
+
+parse_options() {
 	while getopts :b:d:f:h:k:r:s:t: option; do
 		case "$option" in
 			b) GIT_BRANCH="$OPTARG" ;;
@@ -95,15 +132,14 @@ parse_options() {
 	if [[ -z "${SSH_HOST+x}" ]]; then fatal "SSH host not specified. Use the option '-h'"; fi
 
 	local IFS=$' '
-	info "Running script at $(date +"%Y/%m/%d %H:%M:%S") with options:
+	info "Running script at $(date +"%Y/%m/%d %H:%M:%S") logging to $LOG_FILE with options:
 	TYPE=$TYPE
 	DEPLOYMENT_DIRECTORY=$DEPLOYMENT_DIRECTORY
 	GIT_REPOSITORY=$GIT_REPOSITORY
 	SSH_HOST=$SSH_HOST
 	KEEP_RELEASES=$KEEP_RELEASES
 	GIT_BRANCH=$GIT_BRANCH
-	LOG_FILE=$LOG_FILE
-	FRAMEWORKS=${!FRAMEWORKS[*]}
+	FRAMEWORKS=\"${!FRAMEWORKS[*]}\"
 	SHARED_PATHS=${SHARED_PATHS[*]}
 	"
 }
@@ -233,6 +269,8 @@ rollback() {
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 	trap explain_error ERR
+	set_default_options
+	parse_options_file
 	parse_options "$@"
 	if [[ "$TYPE" == "deploy" ]]; then
 		deploy
