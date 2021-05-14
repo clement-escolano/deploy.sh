@@ -31,11 +31,14 @@ IFS=$'\n\t'
 #/     -f (FRAMEWORKS)
 #/         Specify frameworks that needs to be installed. Can be set multiple
 #/         times. Current frameworks are:
-#/             - django (run migrations and collect static files)
-#/             - npm (install dependencies and run `npm run build`)
+#/             - django (run migrations and collect static files if option
+#/               'static' is set)
+#/             - npm (install dependencies and run `npm run build`, the path
+#/               to the directory to run the commands can be set via an option)
 #/             - python (set up a virtualenv and install requirements)
 #/             - sqlite (back up the database)
 #/         Must me within quotes in the configuration file.
+#/         Options can be set using the '=' sign, for instance: django=static.
 #/     -h (SSH_HOST)
 #/         SSH host to deploy (required)
 #/     -k (KEEP_RELEASES)
@@ -91,11 +94,19 @@ fail_with_details() {
 }
 
 declare -A FRAMEWORKS
+declare -A DEFAULT_FRAMEWORK_VALUES
 set_default_options() {
 	GIT_BRANCH=master
 	KEEP_RELEASES=3
 	SHARED_PATHS=()
 	TYPE=deploy
+	DEFAULT_FRAMEWORK_VALUES[npm]="/"
+}
+
+parse_framework() {
+	IFS="=" read -r framework_name framework_option <<<"$1"
+	default_framework_value="${DEFAULT_FRAMEWORK_VALUES[$framework_name]:-1}"
+	FRAMEWORKS["$framework_name"]="${framework_option:-$default_framework_value}"
 }
 
 parse_options_file() {
@@ -109,8 +120,24 @@ parse_options_file() {
 	IFS=" " read -r -a FRAMEWORK_LIST <<<"${FRAMEWORKS-}"
 	FRAMEWORKS=()
 	for FRAMEWORK in "${FRAMEWORK_LIST[@]}"; do
-		FRAMEWORKS["$FRAMEWORK"]=1
+		parse_framework "$FRAMEWORK"
 	done
+}
+
+# Print frameworks with value only if not default value
+pretty_print_frameworks() {
+	print_frameworks() {
+		for key in "${!FRAMEWORKS[@]}"; do
+			printf "%s" "$key"
+			if [ "${DEFAULT_FRAMEWORK_VALUES[$key]-1}" != "${FRAMEWORKS[$key]}" ]; then
+				printf "=%s" "${FRAMEWORKS[$key]}"
+			fi
+			printf " "
+		done
+	}
+
+	raw_output=$(print_frameworks)
+	echo "${raw_output::-1}"  # Remove last space character
 }
 
 parse_options() {
@@ -118,7 +145,7 @@ parse_options() {
 		case "$option" in
 			b) GIT_BRANCH="$OPTARG" ;;
 			d) DEPLOYMENT_DIRECTORY="$OPTARG" ;;
-			f) FRAMEWORKS["$OPTARG"]=1 ;;
+			f) parse_framework "$OPTARG" ;;
 			h) SSH_HOST="$OPTARG" ;;
 			k) KEEP_RELEASES="$OPTARG" ;;
 			r) GIT_REPOSITORY="$OPTARG" ;;
@@ -140,8 +167,8 @@ parse_options() {
 	SSH_HOST=$SSH_HOST
 	KEEP_RELEASES=$KEEP_RELEASES
 	GIT_BRANCH=$GIT_BRANCH
-	FRAMEWORKS=\"${!FRAMEWORKS[*]}\"
-	SHARED_PATHS=${SHARED_PATHS[*]}
+	FRAMEWORKS=\"$(pretty_print_frameworks)\"
+	SHARED_PATHS=\"${SHARED_PATHS[*]}\"
 	"
 }
 
@@ -208,15 +235,18 @@ run_shared_tasks() {
 run_django_tasks() {
 	info "Running Django migrations"
 	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py migrate"
-	info "Collecting static files"
-	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py collectstatic"
+	if [ static == "${FRAMEWORKS[django]}" ]; then
+		info "Collecting static files"
+		remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py collectstatic"
+	fi
 }
 
 run_npm_tasks() {
+	npm_directory="${FRAMEWORKS[npm]}"
 	info "Installing dependencies from package.json"
-	remote_command "cd $RELEASE_DIRECTORY && npm ci"
+	remote_command "cd $RELEASE_DIRECTORY$npm_directory && npm ci"
 	info "Building website"
-	remote_command "cd $RELEASE_DIRECTORY && npm run build"
+	remote_command "cd $RELEASE_DIRECTORY$npm_directory && npm run build"
 }
 
 run_python_tasks() {

@@ -33,7 +33,7 @@ The file will be sourced, so it follows the environment file format:
 DEPLOYMENT_DIRECTORY=/home/me
 GIT_REPOSITORY=git@example.com:me/deploy.sh.git
 SSH_HOST=user@host
-FRAMEWORKS="python django"
+FRAMEWORKS="python django=static"
 SHARED_PATHS=db.sqlite3
 ```
 
