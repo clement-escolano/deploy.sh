@@ -32,6 +32,7 @@ IFS=$'\n\t'
 #/         Specify frameworks that needs to be installed. Can be set multiple
 #/         times. Current frameworks are:
 #/             - django (run migrations and collect static files)
+#/             - npm (install dependencies and run `npm run build`)
 #/             - python (set up a virtualenv and install requirements)
 #/             - sqlite (back up the database)
 #/         Must me within quotes in the configuration file.
@@ -204,6 +205,20 @@ run_shared_tasks() {
 	done
 }
 
+run_django_tasks() {
+	info "Running Django migrations"
+	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py migrate"
+	info "Collecting static files"
+	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py collectstatic"
+}
+
+run_npm_tasks() {
+	info "Installing dependencies from package.json"
+	remote_command "cd $RELEASE_DIRECTORY && npm ci"
+	info "Building website"
+	remote_command "cd $RELEASE_DIRECTORY && npm run build"
+}
+
 run_python_tasks() {
 	info "Creating Virtual environment"
 	remote_command "cd $RELEASE_DIRECTORY && python3 -m venv venv"
@@ -216,13 +231,6 @@ run_sqlite_tasks() {
 	info "Backing up database"
 	remote_command_with_warning "cd $RELEASE_DIRECTORY && test -f db.sqlite3 || echo No existing database found."
 	remote_command "cd $RELEASE_DIRECTORY && test -f db.sqlite3 && cp db.sqlite3 db.sqlite3.bak || true"
-}
-
-run_django_tasks() {
-	info "Running Django migrations"
-	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py migrate"
-	info "Collecting static files"
-	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py collectstatic"
 }
 
 publish() {
@@ -247,9 +255,10 @@ deploy() {
 	RELEASE_DIRECTORY="$DEPLOYMENT_DIRECTORY/releases/$(date +"%Y%m%d%H%M%S")"
 	fetch_repository
 	if [ "${#SHARED_PATHS[@]}" -gt 0 ]; then run_shared_tasks; fi
-	if [ -n "${FRAMEWORKS[python]}" ]; then run_python_tasks; fi
-	if [ -n "${FRAMEWORKS[sqlite]}" ]; then run_sqlite_tasks; fi
-	if [ -n "${FRAMEWORKS[django]}" ]; then run_django_tasks; fi
+	if [ -n "${FRAMEWORKS[npm]-}" ]; then run_npm_tasks; fi
+	if [ -n "${FRAMEWORKS[python]-}" ]; then run_python_tasks; fi
+	if [ -n "${FRAMEWORKS[sqlite]-}" ]; then run_sqlite_tasks; fi
+	if [ -n "${FRAMEWORKS[django]-}" ]; then run_django_tasks; fi
 	publish
 	clean_old_releases
 	summary
