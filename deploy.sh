@@ -23,6 +23,21 @@ IFS=$'\n\t'
 #/     SSH_HOST=user@host
 #/     FRAMEWORKS="python django"
 #/     SHARED_PATHS=db.sqlite3
+#/ Adding hooks to steps:
+#/     Sometimes, basic options are not enough. If you need a specific
+#/     behaviour, you can create a .deploy-hooks.sh file and write hooks.
+#/     The hooks are defined by creating methods called pre_<step>_hook or
+#/     post_<step>_hook. These methods should use remote_command to run a
+#/     command in the remote host. An additional pre_<step>_hook_description
+#/     or post_<step>_hook_description variable can be set to describe the
+#/     hook. The following steps, ordered as run by the script, can be hooked:
+#/         - fetch_repository
+#/         - shared_paths
+#/         - npm
+#/         - sqlite
+#/         - python
+#/         - django
+#/         - publish
 #/ Options (corresponding option for configuration file within brackets):
 #/     -b (GIT_BRANCH)
 #/         Git branch to deploy (default: master)
@@ -113,6 +128,9 @@ parse_options_file() {
 	if [ -f "$PWD/.deploy" ]; then
 		source "$PWD/.deploy"
 	fi
+	if [ -f "$PWD/.deploy-hooks.sh" ]; then
+		source "$PWD/.deploy-hooks.sh"
+	fi
 	if [ -f "$PWD/.deploy-secret" ]; then
 		source "$PWD/.deploy-secret"
 	fi
@@ -137,7 +155,7 @@ pretty_print_frameworks() {
 	}
 
 	raw_output=$(print_frameworks)
-	echo "${raw_output::-1}"  # Remove last space character
+	echo "${raw_output::-1}" # Remove last space character
 }
 
 parse_options() {
@@ -217,13 +235,13 @@ remote_command() {
 	remote_command_with_log "file" "$@"
 }
 
-fetch_repository() {
+run_fetch_repository_step() {
 	info "Fetching git repository $GIT_REPOSITORY (branch $GIT_BRANCH) into $RELEASE_DIRECTORY"
 	remote_command "mkdir -p $RELEASE_DIRECTORY"
 	remote_command "git clone --single-branch --branch $GIT_BRANCH --depth 1 $GIT_REPOSITORY $RELEASE_DIRECTORY 2>&1"
 }
 
-run_shared_tasks() {
+run_shared_paths_step() {
 	for shared_path in "${SHARED_PATHS[@]}"; do
 		info "Linking shared path: $shared_path"
 		remote_command "mkdir -p \$(dirname $DEPLOYMENT_DIRECTORY/shared/$shared_path)"
@@ -232,7 +250,7 @@ run_shared_tasks() {
 	done
 }
 
-run_django_tasks() {
+run_django_step() {
 	info "Running Django migrations"
 	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py migrate"
 	if [ static == "${FRAMEWORKS[django]}" ]; then
@@ -241,7 +259,7 @@ run_django_tasks() {
 	fi
 }
 
-run_npm_tasks() {
+run_npm_step() {
 	npm_directory="${FRAMEWORKS[npm]}"
 	info "Installing dependencies from package.json"
 	remote_command "cd $RELEASE_DIRECTORY$npm_directory && npm ci"
@@ -249,7 +267,7 @@ run_npm_tasks() {
 	remote_command "cd $RELEASE_DIRECTORY$npm_directory && npm run build"
 }
 
-run_python_tasks() {
+run_python_step() {
 	info "Creating Virtual environment"
 	remote_command "cd $RELEASE_DIRECTORY && python3 -m venv venv"
 	remote_command "cd $RELEASE_DIRECTORY && venv/bin/pip install pip --upgrade"
@@ -257,13 +275,13 @@ run_python_tasks() {
 	remote_command "cd $RELEASE_DIRECTORY && venv/bin/pip install -r requirements.txt"
 }
 
-run_sqlite_tasks() {
+run_sqlite_step() {
 	info "Backing up database"
 	remote_command_with_warning "cd $RELEASE_DIRECTORY && test -f db.sqlite3 || echo No existing database found."
 	remote_command "cd $RELEASE_DIRECTORY && test -f db.sqlite3 && cp db.sqlite3 db.sqlite3.bak || true"
 }
 
-publish() {
+run_publish_step() {
 	info "Publishing release"
 	remote_command "cd $DEPLOYMENT_DIRECTORY && if [ -d current ] && [ ! -L current ]; then echo Error: could not make symbolic link && exit 1; fi"
 	remote_command "cd $DEPLOYMENT_DIRECTORY && ln -nfs $RELEASE_DIRECTORY current_tmp && mv -fT current_tmp current"
@@ -281,15 +299,38 @@ summary() {
 	remote_command_with_info "cd $RELEASE_DIRECTORY && echo Successfully deployed to commit: \$(git log -1 --pretty=%B)"
 }
 
+is_hook_defined() {
+	declare -F "$1" >/dev/null
+}
+
+run_step() {
+	pre_hook="pre_$1_hook"
+	if is_hook_defined "$pre_hook"; then
+		pre_hook_description="pre_$1_hook_description"
+		info "Running pre hook for $1: ${!pre_hook_description-'User defined hook'}"
+		$pre_hook
+	fi
+
+	actual_step="run_$1_step"
+	$actual_step
+
+	post_hook="post_$1_hook"
+	if is_hook_defined "$post_hook"; then
+		post_hook_description="post_$1_hook_description"
+		info "Running post hook for $1: ${!post_hook_description-'User defined hook'}"
+		$post_hook
+	fi
+}
+
 deploy() {
 	RELEASE_DIRECTORY="$DEPLOYMENT_DIRECTORY/releases/$(date +"%Y%m%d%H%M%S")"
-	fetch_repository
-	if [ "${#SHARED_PATHS[@]}" -gt 0 ]; then run_shared_tasks; fi
-	if [ -n "${FRAMEWORKS[npm]-}" ]; then run_npm_tasks; fi
-	if [ -n "${FRAMEWORKS[python]-}" ]; then run_python_tasks; fi
-	if [ -n "${FRAMEWORKS[sqlite]-}" ]; then run_sqlite_tasks; fi
-	if [ -n "${FRAMEWORKS[django]-}" ]; then run_django_tasks; fi
-	publish
+	run_step fetch_repository
+	if [ "${#SHARED_PATHS[@]}" -gt 0 ]; then run_step shared_paths; fi
+	if [ -n "${FRAMEWORKS[npm]-}" ]; then run_step npm; fi
+	if [ -n "${FRAMEWORKS[sqlite]-}" ]; then run_step sqlite; fi
+	if [ -n "${FRAMEWORKS[python]-}" ]; then run_step python; fi
+	if [ -n "${FRAMEWORKS[django]-}" ]; then run_step django; fi
+	run_step publish
 	clean_old_releases
 	summary
 }
@@ -302,7 +343,7 @@ rollback() {
 	if [[ -z $previous_release ]]; then fatal "No previous release available. Cannot rollback."; fi
 	info "Beginning rollback to release $previous_release"
 	RELEASE_DIRECTORY="$DEPLOYMENT_DIRECTORY/releases/$previous_release"
-	publish
+	run_step publish
 	summary
 }
 
