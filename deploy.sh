@@ -82,10 +82,20 @@ expr "$*" : ".*--help" >/dev/null && usage
 readonly LOG_FILE="/tmp/$(basename "$0")-$(date +"%Y%m%d").log"
 debug() { echo "[DEBUG]	$*" | tee -a "$LOG_FILE" >/dev/null; }
 info() { echo "[INFO]	$*" | tee -a "$LOG_FILE"; }
-warning() { echo "[WARN]	$*" | tee -a "$LOG_FILE" >&2; }
-error() { echo "[ERROR]	$*" | tee -a "$LOG_FILE" >&2; }
+warning() {
+	printf "\033[33m"
+	echo "[WARN]	$*" | tee -a "$LOG_FILE" >&2
+	printf "\033[39m"
+}
+error() {
+	printf "\033[33m"
+	echo "[ERROR]	$*" | tee -a "$LOG_FILE" >&2
+	printf "\033[39m"
+}
 fatal() {
+	printf "\033[31m"
 	echo "[FATAL]	$*" | tee -a "$LOG_FILE" >&2
+	printf "\033[39m"
 	false  # Returns an error to force the trap to work
 	exit 1 # Make sure the script exits even if there is an issue with the trap
 }
