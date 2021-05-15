@@ -255,21 +255,18 @@ run_shared_paths_step() {
 	done
 }
 
-run_django_step() {
-	info "Running Django migrations"
-	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py migrate"
-	if [ static == "${FRAMEWORKS[django]}" ]; then
-		info "Collecting static files"
-		remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py collectstatic"
-	fi
-}
-
 run_npm_step() {
 	npm_directory="${FRAMEWORKS[npm]}"
 	info "Installing dependencies from package.json"
 	remote_command "cd $RELEASE_DIRECTORY$npm_directory && npm ci"
 	info "Building website"
 	remote_command "cd $RELEASE_DIRECTORY$npm_directory && npm run build"
+}
+
+run_sqlite_step() {
+	info "Backing up database"
+	remote_command_with_warning "cd $RELEASE_DIRECTORY && test -f db.sqlite3 || echo No existing database found."
+	remote_command "cd $RELEASE_DIRECTORY && test -f db.sqlite3 && cp db.sqlite3 db.sqlite3.bak || true"
 }
 
 run_python_step() {
@@ -280,10 +277,13 @@ run_python_step() {
 	remote_command "cd $RELEASE_DIRECTORY && venv/bin/pip install -r requirements.txt"
 }
 
-run_sqlite_step() {
-	info "Backing up database"
-	remote_command_with_warning "cd $RELEASE_DIRECTORY && test -f db.sqlite3 || echo No existing database found."
-	remote_command "cd $RELEASE_DIRECTORY && test -f db.sqlite3 && cp db.sqlite3 db.sqlite3.bak || true"
+run_django_step() {
+	info "Running Django migrations"
+	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py migrate"
+	if [ static == "${FRAMEWORKS[django]}" ]; then
+		info "Collecting static files"
+		remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py collectstatic"
+	fi
 }
 
 run_publish_step() {
