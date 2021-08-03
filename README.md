@@ -4,7 +4,7 @@ Shell utility to deploy a git repository to a remote SSH server.
 
 ## Requirements
 
-This script is focused to have minimal dependencies:
+`deploy.sh` focuses on having minimal dependencies:
 
 - SSH access to the remote server
 - `bash` installed on client
@@ -12,8 +12,7 @@ This script is focused to have minimal dependencies:
 
 ## Getting started
 
-The script can be copied in the working directory or in a directory in the `PATH`.
-This script only requires bash installed on the client and the server.
+The script can be copied in the working directory and called with `./deploy.sh` or in a directory in the `PATH` and called with `deploy.sh`.
 
 ## Example with command line options
 
@@ -45,3 +44,14 @@ deploy.sh
 
 If you need to specify a secret in the configuration (a token to fetch the git repository for instance),
 you can do so in the `.deploy-secret` file which follows the same format as `.deploy` file.
+This file should not be committed in your git repository.
+
+## Advanced usage
+
+Running `deploy.sh --help` displays a complete documentation of `deploy.sh` (which is also readable at the beginning of the script).
+
+The following features are detailed:
+
+* hooks (ability to run custom code before or after steps)
+* rollback
+* supported frameworks (python, django, npm, sqlite)
