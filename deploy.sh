@@ -47,7 +47,7 @@ IFS=$'\n\t'
 #/         Specify frameworks that needs to be installed. Can be set multiple
 #/         times. Current frameworks are:
 #/             - django (run migrations and collect static files if option
-#/               'static' is set)
+#/               'static' is set, .env files are sourced automatically)
 #/             - npm (install dependencies and run `npm run build`, the path
 #/               to the directory to run the commands can be set via an option)
 #/             - python (set up a virtualenv and install requirements)
@@ -289,10 +289,10 @@ run_python_step() {
 
 run_django_step() {
 	info "Running Django migrations"
-	remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py migrate"
+	remote_command "cd $RELEASE_DIRECTORY && if [ -f $DEPLOYMENT_DIRECTORY/.env ]; then set -a && . $DEPLOYMENT_DIRECTORY/.env && set +a; fi && venv/bin/python manage.py migrate"
 	if [ static == "${FRAMEWORKS[django]}" ]; then
 		info "Collecting static files"
-		remote_command "cd $RELEASE_DIRECTORY && venv/bin/python manage.py collectstatic"
+		remote_command "cd $RELEASE_DIRECTORY && if [ -f $DEPLOYMENT_DIRECTORY/.env ]; then set -a && . $DEPLOYMENT_DIRECTORY/.env && set +a; fi && venv/bin/python manage.py collectstatic"
 	fi
 }
 
