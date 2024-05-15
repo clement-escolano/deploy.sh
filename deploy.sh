@@ -268,7 +268,7 @@ run_shared_paths_step() {
 run_npm_step() {
 	npm_directory="${FRAMEWORKS[npm]}"
 	info "Installing dependencies from package.json"
-	remote_command "cd $RELEASE_DIRECTORY$npm_directory && npm ci"
+	remote_command "cd $RELEASE_DIRECTORY$npm_directory && npm ci --omit=dev"
 	info "Building website"
 	remote_command "cd $RELEASE_DIRECTORY$npm_directory && npm run build"
 }
