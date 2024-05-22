@@ -338,10 +338,10 @@ deploy() {
 	RELEASE_DIRECTORY="$DEPLOYMENT_DIRECTORY/releases/$(date +"%Y%m%d%H%M%S")"
 	run_step fetch_repository
 	if [ "${#SHARED_PATHS[@]}" -gt 0 ]; then run_step shared_paths; fi
-	if [ -n "${FRAMEWORKS[npm]-}" ]; then run_step npm; fi
 	if [ -n "${FRAMEWORKS[sqlite]-}" ]; then run_step sqlite; fi
 	if [ -n "${FRAMEWORKS[python]-}" ]; then run_step python; fi
 	if [ -n "${FRAMEWORKS[django]-}" ]; then run_step django; fi
+	if [ -n "${FRAMEWORKS[npm]-}" ]; then run_step npm; fi
 	run_step publish
 	clean_old_releases
 	summary
