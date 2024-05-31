@@ -307,8 +307,16 @@ clean_old_releases() {
 	remote_command "cd $DEPLOYMENT_DIRECTORY/releases && (find . -mindepth 1 -maxdepth 1 | sort -r | head -n $KEEP_RELEASES; find . -mindepth 1 -maxdepth 1) | sort | uniq -u | xargs rm -rf"
 }
 
+get_elapsed_time() {
+	END=$(date +%s)
+	DIFF=$(echo "$END - $START" | bc)
+	((m = $DIFF / 60))
+	((s = $DIFF % 60))
+	printf "%02d:%02d" $m $s
+}
+
 summary() {
-	remote_command_with_info "cd $RELEASE_DIRECTORY && echo Successfully deployed to commit: \$(git log -1 --pretty=%B)"
+	remote_command_with_info "cd $RELEASE_DIRECTORY && echo Successfully deployed in $(get_elapsed_time) to commit: \$(git log -1 --pretty=%B)"
 }
 
 is_hook_defined() {
@@ -360,6 +368,7 @@ rollback() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	START=$(date +%s)
 	trap explain_error ERR
 	set_default_options
 	parse_options_file
