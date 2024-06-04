@@ -310,9 +310,13 @@ clean_old_releases() {
 get_elapsed_time() {
 	END=$(date +%s)
 	DIFF=$(echo "$END - $START" | bc)
-	((m = $DIFF / 60))
-	((s = $DIFF % 60))
-	printf "%02d:%02d" $m $s
+	if [[ $DIFF -lt 60 ]]; then
+		printf "%02ds" $DIFF
+	else
+		((m = $DIFF / 60))
+		((s = $DIFF % 60))
+		printf "%02d:%02d" $m $s
+	fi
 }
 
 summary() {
