@@ -280,16 +280,16 @@ run_sqlite_step() {
 }
 
 run_python_step() {
-	info "Installing dependencies from Pipfile"
-	remote_command "cd $RELEASE_DIRECTORY && pipenv install --deploy"
+	info "Installing dependencies with uv"
+	remote_command "cd $RELEASE_DIRECTORY && pipx run uv sync --no-default-groups"
 }
 
 run_django_step() {
 	info "Running Django migrations"
-	remote_command "cd $RELEASE_DIRECTORY && pipenv run ./manage.py migrate"
+	remote_command "cd $RELEASE_DIRECTORY && pipx run uv run manage.py migrate"
 	if [ static == "${FRAMEWORKS[django]}" ]; then
 		info "Collecting static files"
-		remote_command "cd $RELEASE_DIRECTORY && pipenv run ./manage.py collectstatic"
+		remote_command "cd $RELEASE_DIRECTORY && pipx run uv run manage.py collectstatic"
 	fi
 }
 
